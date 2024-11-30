@@ -1,4 +1,5 @@
 const User = require("../models/userModels")
+const Doctor = require("../models/doctorModel")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken");
 
@@ -83,6 +84,7 @@ exports.loginUser = async (req, res) => {
 exports.userProfile = async (req, res) => {
     try {
         const user = await User.findOne({ _id: req.body.userId });
+        user.password = undefined;
         if (!user) {
             return res
                 .status(200)
@@ -92,10 +94,7 @@ exports.userProfile = async (req, res) => {
         } else {
             res.status(200).send({
                 success: true,
-                data: {
-                    name: user.name,
-                    email: user.email,
-                },
+                data: user
             });
         }
     } catch (error) {
@@ -108,5 +107,92 @@ exports.userProfile = async (req, res) => {
             });
     }
 }
+
+
+
+exports.applyDoctor = async (req, res) => {
+    try {
+        const newDoctor = new Doctor({ ...req.body, status: "pending" });
+        await newDoctor.save();
+        const adminUser = await User.findOne({ isAdmin: true });
+
+        const unseenNotifications = adminUser.unseenNotifications
+        unseenNotifications.push({
+            type: "new-doctor-request",
+            message: `${newDoctor.firstName} ${newDoctor.lastName} has applied for a doctor account`,
+            data: {
+                doctorId: newDoctor._id,
+                name: newDoctor.firstName + " " + newDoctor.lastName
+            },
+            onClickPath: "/admin/doctors"
+        })
+        await User.findByIdAndUpdate(adminUser._id, { unseenNotifications });
+        res.status(200).send({
+            success: true,
+            message: "Doctor account applied successfully",
+        });
+    } catch (error) {
+        console.log(error);
+        res
+            .status(500)
+            .send({
+                message: "Error applying doctor account",
+                success: false, error
+            });
+    }
+}
+
+
+// mark all notification as seen
+exports.markAllNotificationSeen = async (req, res) => {
+    try {
+        const user = await User.findOne({ _id: req.body.userId });
+        const unseenNotifications = user.unseenNotifications;
+        const seenNotifications = user.seenNotifications
+        seenNotifications.push(...unseenNotifications);
+        user.unseenNotifications = [];
+        user.seenNotifications = seenNotifications;
+        const updatedUser = await user.save()
+        updatedUser.password = undefined;
+        res.status(200).send({
+            success: true,
+            message: "All notifications marked as seen",
+            data: updatedUser,
+        });
+    } catch (error) {
+        console.log(error);
+        res
+            .status(500)
+            .send({
+                message: "Error applying doctor account",
+                success: false, error
+            });
+    }
+}
+
+
+// delete all notifications 
+exports.deleteAllNotifications = async (req, res) => {
+    try {
+        const user = await User.findOne({ _id: req.body.userId });
+        user.seenNotifications = []
+        user.unseenNotifications = [];
+        const updatedUser = await user.save();
+        updatedUser.password = undefined;
+        res.status(200).send({
+            success: true,
+            message: "All notifications marked as seen",
+            data: updatedUser,
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).send({
+            message: "Error applying doctor account",
+            success: false,
+            error
+        });
+    }
+}
+
 
 
